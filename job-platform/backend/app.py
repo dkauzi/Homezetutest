@@ -56,5 +56,8 @@ def match_jobs():
     
     return jsonify({"matches": matches[:10]})
 
+print("SUPABASE_URL:", os.getenv('SUPABASE_URL'))
+print("SUPABASE_KEY:", os.getenv('SUPABASE_KEY'))
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
