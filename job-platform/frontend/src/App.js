@@ -4,8 +4,18 @@ import './App.css';
 
 const supabase = createClient(
   process.env.REACT_APP_SUPABASE_URL,
-  process.env.REACT_APP_SUPABASE_KEY
+  process.env.REACT_APP_SUPABASE_KEY,
+  {
+    global: {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey'
+      }
+    }
+  }
 );
+console.log('Supabase URL:', process.env.REACT_APP_SUPABASE_URL);
+console.log('Supabase Key:', process.env.REACT_APP_SUPABASE_KEY);
 
 function JobSeekerDashboard() {
   const [resume, setResume] = useState('');
@@ -57,7 +67,7 @@ function JobSeekerDashboard() {
       </div>
 
       <div className="job-listings">
-        <h2>Recent Job Postings</h2>
+        <h2>Recent Job Postings.</h2>
         {jobs.map(job => (
           <div key={job.id} className="job-card">
             <h3>{job.title}</h3>
