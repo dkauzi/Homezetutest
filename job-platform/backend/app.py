@@ -1,63 +1,60 @@
 from flask import Flask, request, jsonify
 from supabase import create_client
-from transformers import pipeline
-import os
-from ulid import ULID
 from dotenv import load_dotenv
-load_dotenv() 
+from llama_cpp import Llama
+import os
 
+# Load environment variables
+load_dotenv()
+
+# Initialize Flask and Supabase
 app = Flask(__name__)
 supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
 
-# Load quantized LLaMA-3-8B
-llm = pipeline("text-generation", 
-              model="meta-llama/Meta-Llama-3-8B",
-              device_map="auto",
-              torch_dtype="auto")
+# Initialize quantized Mistral-7B
+model_path = "models/mistral-7b-instruct-v0.1.Q4_K_M.gguf"
+
+llm = Llama(
+    model_path=model_path,
+    n_ctx=2048,        # Context window size
+    n_threads=4,       # CPU threads
+    n_gpu_layers=33    # Offload 33 layers to GPU (if available)
+)
 
 @app.route('/optimize', methods=['POST'])
 def optimize_resume():
     try:
-        resume = request.json.get('resume', '')
-        prompt = f"""Optimize this resume for Applicant Tracking Systems:
-        {resume[:3000]}
-        Focus on:
-        - Adding missing keywords
-        - Improving action verbs
-        - ATS-friendly formatting
-        Output:"""
+        resume_text = request.json.get('resume', '')[:3000]  # Limit input
         
-        optimized = llm(prompt, 
-                       max_new_tokens=1000,
-                       temperature=0.7)[0]['generated_text']
+        # Create optimization prompt
+        prompt = f"""<s>[INST] 
+        Optimize this resume for Applicant Tracking Systems (ATS):
+        {resume_text}
+        
+        Focus on:
+        - Adding missing keywords from software engineering job descriptions
+        - Using action verbs like "developed", "implemented", "optimized"
+        - Improving readability for automated systems
+        - Maintaining factual accuracy
+        [/INST]"""
+        
+        # Generate optimized resume
+        output = llm.create_chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        optimized = output['choices'][0]['message']['content']
         
         return jsonify({
-            "original": resume,
-            "optimized": optimized.split("Output:")[-1].strip()
+            "original": resume_text,
+            "optimized": optimized,
+            "model": "Mistral-7B-Q4_K_M"
         })
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/jobs', methods=['POST'])
-def create_job():
-    job_data = request.json
-    result = supabase.table('jobs').insert(job_data).execute()
-    return jsonify(result.data)
-
-@app.route('/match', methods=['POST'])
-def match_jobs():
-    resume = request.json.get('resume', '')
-    
-    # Simple keyword matching
-    jobs = supabase.table('jobs').select('*').execute()
-    matches = [job for job in jobs.data if any(
-        kw.lower() in resume.lower() for kw in job['keywords'])]
-    
-    return jsonify({"matches": matches[:10]})
-
-print("SUPABASE_URL:", os.getenv('SUPABASE_URL'))
-print("SUPABASE_KEY:", os.getenv('SUPABASE_KEY'))
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8080, debug=True)
