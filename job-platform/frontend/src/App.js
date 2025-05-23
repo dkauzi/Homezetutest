@@ -1,90 +1,36 @@
-import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import './App.css';
-
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL,
-  process.env.REACT_APP_SUPABASE_KEY,
-  {
-    global: {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey'
-      }
-    }
-  }
-);
-console.log('Supabase URL:', process.env.REACT_APP_SUPABASE_URL);
-console.log('Supabase Key:', process.env.REACT_APP_SUPABASE_KEY);
-
-function JobSeekerDashboard() {
-  const [resume, setResume] = useState('');
-  const [optimizedResume, setOptimizedResume] = useState('');
-  const [jobs, setJobs] = useState([]);
-
-  // Fetch jobs from Supabase
-  useEffect(() => {
-    const fetchJobs = async () => {
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('*');
-      
-      if (!error) setJobs(data);
-    };
-    fetchJobs();
-  }, []);
-
-  // Optimize Resume
-  const handleOptimize = async () => {
-    try {
-      const response = await fetch('http://localhost:8080/optimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume })
-      });
-      
-      const { optimized } = await response.json();
-      setOptimizedResume(optimized);
-    } catch (error) {
-      console.error('Optimization failed:', error);
-    }
-  };
-
-  return (
-    <div className="app-container">
-      <h1>AI Resume Optimizer</h1>
-      
-      <div className="resume-section">
-        <textarea
-          value={resume}
-          onChange={(e) => setResume(e.target.value)}
-          placeholder="Paste your resume here..."
-        />
-        <button onClick={handleOptimize}>Optimize with AI</button>
-        <div className="optimized-resume">
-          {optimizedResume}
-        </div>
-      </div>
-
-      <div className="job-listings">
-        <h2>Recent Job Postings.</h2>
-        {jobs.map(job => (
-          <div key={job.id} className="job-card">
-            <h3>{job.title}</h3>
-            <p>{job.company}</p>
-            <p>{job.description.slice(0, 100)}...</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// src/App.js
+import { Routes, Route } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import { SupabaseProvider } from './context/SupabaseContext';
+import HomePage from './pages/HomePage';
+import EmployerDashboard from './pages/EmployerDashboard';
+import JobSeekerDashboard from './pages/JobSeekerDashboard';
+import JobDetails from './pages/JobDetails';
+import AuthPage from './pages/AuthPage';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
-    <div className="App">
-      <JobSeekerDashboard />
-    </div>
+    <SupabaseProvider>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+        <Toaster position="top-right" />
+        
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/auth" element={<AuthPage />} />
+          
+          <Route path="/jobs/:id" element={<JobDetails />} />
+          
+          <Route element={<ProtectedRoute allowedRoles={['employer']} />}>
+            <Route path="/employer" element={<EmployerDashboard />} />
+          </Route>
+
+          <Route element={<ProtectedRoute allowedRoles={['jobseeker']} />}>
+            <Route path="/jobseeker" element={<JobSeekerDashboard />} />
+          </Route>
+        </Routes>
+      </div>
+    </SupabaseProvider>
   );
 }
 
