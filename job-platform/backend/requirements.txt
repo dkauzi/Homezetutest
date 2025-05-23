@@ -1,0 +1,10 @@
+flask
+supabase
+python-dotenv
+transformers
+torch
+flask-cors
+python-ulid
+bleach
+flask-limiter
+Flask-CORS==3.0.10
