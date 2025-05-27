@@ -1,53 +1,43 @@
-// src/pages/AuthPage.jsx
-import { useState, useEffect } from 'react';
-import { useSupabase } from '../context/SupabaseContext';
-import { Tab, Tabs, TextField, Button } from '@mui/material';
-import toast from 'react-hot-toast';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSupabase } from '../context/SupabaseContext';
+import { Tabs, Tab, TextField, Button } from '@mui/material';
+import toast from 'react-hot-toast';
 
 export default function AuthPage() {
-  const { user, register, login } = useSupabase();
+  const { login, register } = useSupabase();
   const [activeTab, setActiveTab] = useState(0);
-  const [formData, setFormData] = useState({ 
-    email: '', 
-    password: '', 
-    role: 'jobseeker' 
-  });
+  const [formData, setFormData] = useState({ email: '', password: '', role: 'jobseeker' });
   const navigate = useNavigate();
-
-  // Handle redirection when user state changes
-  useEffect(() => {
-    if (user) {
-      const role = user.user_metadata?.role || 'jobseeker';
-      const dashboardPath = role === 'employer' ? '/employer' : '/jobseeker';
-      navigate(dashboardPath);
-    }
-  }, [user]); // Removed navigate from dependencies
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       if (activeTab === 0) {
-        // Login flow
         await login(formData);
+        toast.success('Login successful!');
+        // Redirect to dashboard based on role
+        const role = formData.role || 'jobseeker';
+        navigate(role === 'employer' ? '/employer' : '/jobseeker');
       } else {
         // Registration flow
         if (!formData.email.includes('@') || formData.password.length < 6) {
           throw new Error('Invalid email or password (must be at least 6 characters)');
         }
-        
         let companyName;
         if (formData.role === 'employer') {
           companyName = prompt('Please enter your company name:');
           if (!companyName) throw new Error('Company name is required for employers');
         }
-
         await register({
           email: formData.email,
           password: formData.password,
           role: formData.role,
           company_name: companyName
         });
+        toast.success('Registration successful!');
+        // Redirect to dashboard based on role
+        navigate(formData.role === 'employer' ? '/employer' : '/jobseeker');
       }
     } catch (error) {
       toast.error(error.message);
