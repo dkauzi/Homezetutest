@@ -11,9 +11,9 @@ export default function JobDetails() {
 
   useEffect(() => {
     fetchJobs().then(jobs => {
-      setJob(jobs.find(j => j.id === Number(id)));
+      setJob(jobs.find(j => String(j.id) === String(id)));
     });
-  }, [id]);
+  }, [id, fetchJobs]);
 
   if (!job) return <div>Loading...</div>;
 

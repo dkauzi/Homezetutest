@@ -8,43 +8,39 @@ export default function JobSeekerDashboard() {
   const [applications, setApplications] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [resume, setResume] = useState('');
-  const [optimizedResume, setOptimizedResume] = useState('');
+  const [pdfFile, setPdfFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [optimizing, setOptimizing] = useState(false);
 
   useEffect(() => {
     fetchJobs().then(setJobs);
     fetchMyApplications().then(setApplications);
   }, []);
 
-  const handleOptimize = async () => {
-    setOptimizing(true);
-    try {
-      const res = await fetch('/api/optimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resume,
-          job_description: selectedJob.description,
-        }),
-      });
-      const data = await res.json();
-      setOptimizedResume(data.optimized_resume || '');
-    } catch (err) {
-      setOptimizedResume('Failed to optimize resume.');
-    }
-    setOptimizing(false);
-  };
-
   const handleApply = async () => {
     setLoading(true);
-    await applyToJob(selectedJob.id, optimizedResume || resume);
+
+    let pdfBase64 = '';
+    if (pdfFile) {
+      pdfBase64 = await toBase64(pdfFile);
+    }
+
+    await applyToJob(selectedJob.id, resume, pdfBase64);
     setLoading(false);
     setSelectedJob(null);
     setResume('');
-    setOptimizedResume('');
+    setPdfFile(null);
     fetchMyApplications().then(setApplications);
   };
+
+  // Helper to convert PDF to base64
+  function toBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = error => reject(error);
+    });
+  }
 
   return (
     <div className="p-8">
@@ -60,7 +56,7 @@ export default function JobSeekerDashboard() {
               onClick={() => {
                 setSelectedJob(job);
                 setResume('');
-                setOptimizedResume('');
+                setPdfFile(null);
               }}
             >
               Apply
@@ -80,59 +76,37 @@ export default function JobSeekerDashboard() {
               rows={6}
               placeholder="Paste your resume here..."
               value={resume}
-              onChange={e => {
-                setResume(e.target.value);
-                setOptimizedResume('');
-              }}
-              disabled={optimizing || loading}
+              onChange={e => setResume(e.target.value)}
+              disabled={loading}
             />
-            <div className="flex gap-2 mb-4">
+            <div className="mb-4">
+              <label className="block mb-1 font-medium">Upload PDF Resume (optional):</label>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={e => setPdfFile(e.target.files[0])}
+                disabled={loading}
+              />
+              {pdfFile && (
+                <div className="text-sm text-gray-600 mt-1">{pdfFile.name}</div>
+              )}
+            </div>
+            <div className="flex gap-2">
               <button
-                className="px-4 py-2 bg-green-600 text-white rounded"
-                onClick={handleOptimize}
-                disabled={optimizing || !resume}
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+                onClick={handleApply}
+                disabled={loading}
               >
-                {optimizing ? 'Optimizing...' : 'Optimize Resume'}
+                {loading ? 'Submitting...' : 'Submit Application'}
+              </button>
+              <button
+                className="px-4 py-2 bg-gray-200 rounded"
+                onClick={() => setSelectedJob(null)}
+                disabled={loading}
+              >
+                Cancel
               </button>
             </div>
-            {optimizedResume && (
-              <div className="mb-4">
-                <h4 className="font-medium mb-2">Optimized Resume Preview</h4>
-                <pre className="bg-gray-100 p-2 rounded whitespace-pre-wrap max-h-48 overflow-auto">{optimizedResume}</pre>
-                <div className="flex gap-2 mt-2">
-                  <button
-                    className="px-4 py-2 bg-blue-600 text-white rounded"
-                    onClick={handleApply}
-                    disabled={loading}
-                  >
-                    {loading ? 'Submitting...' : 'Submit Optimized Resume'}
-                  </button>
-                  <button
-                    className="px-4 py-2 bg-gray-200 rounded"
-                    onClick={() => setOptimizedResume('')}
-                  >
-                    Edit Original
-                  </button>
-                  <button
-                    className="px-4 py-2 bg-gray-200 rounded"
-                    onClick={() => setSelectedJob(null)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-            {!optimizedResume && (
-              <div className="flex gap-2">
-                <button
-                  className="px-4 py-2 bg-gray-200 rounded"
-                  onClick={() => setSelectedJob(null)}
-                  disabled={loading || optimizing}
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}

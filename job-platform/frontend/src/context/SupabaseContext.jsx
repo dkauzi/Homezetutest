@@ -79,14 +79,14 @@ export function SupabaseProvider({ children }) {
   };
 
   // Apply to a job
-  const applyToJob = async (jobId, resume) => {
+  const applyToJob = async (jobId, resume, pdfBase64) => {
     if (!user) return;
     const { data, error } = await supabase.from('applications').insert([
       {
         job_id: jobId,
-        user_id: user.id,
+        applicant_id: user.id,
         original_resume: resume,
-        optimized_resume: resume
+        pdf_resume: pdfBase64 || null
       }
     ]);
     return data;
