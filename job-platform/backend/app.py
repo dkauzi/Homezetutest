@@ -190,34 +190,20 @@ def get_jobs():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/optimize', methods=['POST'])
-@jobseeker_required
-@limiter.limit("10 per hour")
-def optimize_resume():
+def optimize():
     try:
-        resume_text = request.json.get('resume', '')[:2000]  # Limit input length
-        
-        prompt = f"""Optimize this resume for Applicant Tracking Systems:
-        {resume_text}
-        Focus on:
-        - Adding relevant keywords
-        - Using action verbs
-        - Improving readability
-        - Maintaining factual accuracy"""
-        
-        optimized = resume_optimizer(
-            prompt,
-            max_length=1024,
-            temperature=0.7,
-            num_beams=4
-        )[0]['generated_text']
+        data = request.get_json()
+        resume = data.get('resume')
+        job_description = data.get('job_description')
+        if not resume or not job_description:
+            return jsonify({"error": "Missing resume or job_description"}), 400
 
-        return jsonify({
-            "original": resume_text,
-            "optimized": optimized
-        })
+        # Simulate optimization (replace with your logic)
+        optimized_resume = resume + "\n\n[Optimized for: " + job_description[:50] + "...]"
 
+        return jsonify({"optimized_resume": optimized_resume})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 400
 
 @app.route('/api/applications', methods=['POST'])
 @jobseeker_required
