@@ -1,33 +1,28 @@
 # docker-compose.yml
-version: '3.8'
 
 services:
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    build: ./job-platform/backend
     ports:
       - "5000:5000"
-    volumes:
-      - ./backend:/app
     env_file:
-      - backend/.env
-    environment:
-      - FLASK_ENV=development
+      - ./job-platform/backend/.env  # Updated path
+    volumes:
+      - ./job-platform/backend:/app
     networks:
       - job-network
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    build: ./job-platform/frontend
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
+      - ./job-platform/frontend:/app
       - /app/node_modules
     environment:
       - REACT_APP_API_BASE_URL=http://backend:5000
+      - REACT_APP_SUPABASE_URL=https://dhnveaaocdgibcxgbsaj.supabase.co
+      - REACT_APP_SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRobnZlYWFvY2RnaWJjeGdic2FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4OTkyOTIsImV4cCI6MjA2MzQ3NTI5Mn0.mqq-3e9oZQVDp5rDwrCfK3mnByR22XMrfMICVRYuhQM  
     depends_on:
       - backend
     networks:

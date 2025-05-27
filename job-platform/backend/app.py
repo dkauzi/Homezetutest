@@ -82,36 +82,55 @@ def jobseeker_required(f):
 
 # Routes
 @app.route('/api/register', methods=['POST'])
-@limiter.limit("5 per hour")
+# @limiter.limit("5 per hour")
 def register():
+    data = request.json
     try:
-        data = request.json
-        required_fields = ['email', 'password', 'role']
-        if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
+        # Use Supabase Admin Client (bypasses RLS)
+        admin_client = create_client(
+            os.getenv('SUPABASE_URL'),
+            os.getenv('SUPABASE_SERVICE_ROLE_KEY')  # <-- Use SERVICE ROLE KEY
+        )
 
-        # Create auth user
-        auth_response = supabase.auth.sign_up({
+        # 1. Create auth user
+        auth_resp = admin_client.auth.sign_up({
             "email": data['email'],
-            "password": data['password']
+            "password": data['password'],
+            "options": {
+                "data": {  # Include metadata
+                    "role": data['role'],
+                    "company_name": data.get('company_name')
+                }
+            },
+              "email_confirm": True  # Auto-confirm email
         })
 
-        # Create profile
-        profile_data = {
-            "id": auth_response.user.id,
+
+                # Add delay for trigger execution
+        import time
+        time.sleep(1)  # ⬅️ Allow 1s for trigger to complete
+
+        # 2. Verify user exists
+        user = admin_client.auth.admin.get_user_by_id(auth_resp.user.id)
+        if not auth_resp.user:
+            raise Exception("User creation failed")
+
+        # 3. Insert profile using service role
+        profile = admin_client.table('profiles').insert({
+            "id": auth_resp.user.id,
             "email": data['email'],
-            "role": data['role']
-        }
-        
-        if data['role'] == 'employer':
-            profile_data['company_name'] = bleach.clean(data.get('company_name', ''))
+            "role": data['role'],
+            "company_name": data.get('company_name', None)
+        }).execute()
 
-        supabase.table('profiles').insert(profile_data).execute()
-
-        return jsonify({"message": "Registration successful"}), 201
+        return jsonify({
+            "message": "Registration successful",
+            "user_id": auth_resp.user.id,
+            "profile": profile.data
+        }), 201
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 400
 
 @app.route('/api/login', methods=['POST'])
 @limiter.limit("10 per hour")
@@ -130,7 +149,7 @@ def login():
             }
         })
     except Exception as e:
-        return jsonify({"error": "Invalid credentials"}), 401
+        return jsonify({"error": str(e)}), 401
 
 @app.route('/api/jobs', methods=['POST'])
 @employer_required
