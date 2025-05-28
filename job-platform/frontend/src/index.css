@@ -1,14 +1,4 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
-@import 'tailwindcss/typography';
-@import 'tailwindcss/forms';
-@import 'tailwindcss/aspect-ratio';
-@import 'tailwindcss/line-clamp';
-@import './app.css';
-@import './resume.css';
-@import './job-listings.css';
-@import './global.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
