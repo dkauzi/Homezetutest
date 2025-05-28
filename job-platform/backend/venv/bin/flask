@@ -1,4 +1,4 @@
-#!/workspaces/Homezetutest/job-platform/backend/venv/bin/python
+#!/Users/karigi/Downloads/Jober/Homezetutest/job-platform/backend/venv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys

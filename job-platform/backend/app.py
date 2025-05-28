@@ -28,6 +28,12 @@ supabase = create_client(
     os.getenv('SUPABASE_KEY')
 )
 
+# For admin operations:
+admin_client = create_client(
+    os.getenv('SUPABASE_URL'),
+    os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+)
+
 # Authentication middleware
 def employer_required(f):
     @wraps(f)
@@ -71,6 +77,33 @@ def jobseeker_required(f):
             return jsonify({"error": str(e)}), 500
     return decorated
 
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = supabase.auth.get_user()
+        profile = supabase.table('profiles').select('role').eq('id', user.id).single().data
+        if profile['role'] != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+def employer_or_admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        try:
+            user = supabase.auth.get_user()
+            if not user:
+                return jsonify({"error": "Unauthorized"}), 401
+            profile = supabase.table('profiles').select('role', 'is_active').eq('id', user.id).single().data
+            if profile['role'] not in ['employer', 'admin']:
+                return jsonify({"error": "Employer or Admin access required"}), 403
+            if not profile.get('is_active', True):
+                return jsonify({"error": "Account disabled. Contact admin."}), 403
+            return f(*args, **kwargs)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return decorated
+
 # Routes
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -87,7 +120,7 @@ def register():
             "email": data['email'],
             "password": data['password'],
             "options": {
-                "data": {  # Include metadata
+                "data": {
                     "role": data['role'],
                     "company_name": data.get('company_name')
                 }
@@ -141,23 +174,24 @@ def login():
         return jsonify({"error": str(e)}), 401
 
 @app.route('/api/jobs', methods=['POST'])
-@employer_required
-@limiter.limit("5 per hour")
+@employer_or_admin_required
 def create_job():
+    user = supabase.auth.get_user()
     try:
-        user = supabase.auth.get_user()
         data = request.json
-        
+
         if not all(key in data for key in ['title', 'description']):
             return jsonify({"error": "Missing required fields"}), 400
 
-        # Sanitize input
         clean_data = {
             "employer_id": user.id,
             "title": bleach.clean(data['title']),
             "description": bleach.clean(data['description'], tags=['p', 'br', 'ul', 'li']),
             "location": bleach.clean(data.get('location', '')),
-            "salary_range": bleach.clean(data.get('salary_range', ''))
+            "salary": bleach.clean(data.get('salary', '')),
+            "type": bleach.clean(data.get('type', '')),
+            "company": bleach.clean(data.get('company', '')),
+            "additional_questions": data.get('additional_questions', None)
         }
 
         job = supabase.table('jobs').insert(clean_data).execute()
@@ -170,7 +204,7 @@ def create_job():
 def get_jobs():
     try:
         jobs = supabase.table('jobs') \
-            .select('*, profiles:employer_id (company_name)') \
+            .select('*') \
             .order('created_at', {'ascending': False}) \
             .execute()
             
@@ -185,15 +219,20 @@ def submit_application():
         user = supabase.auth.get_user()
         data = request.json
 
+        # Fetch the job to check employer
+        job = supabase.table('jobs').select('employer_id').eq('id', data['job_id']).single().execute()
+        if job.data and job.data['employer_id'] == user.id:
+            return jsonify({"error": "Employers cannot apply to their own job."}), 403
+
         if not all(key in data for key in ['job_id', 'original_resume']):
             return jsonify({"error": "Missing required fields"}), 400
 
-        # Accept pdf_resume as optional
         application_data = {
             "job_id": data['job_id'],
             "applicant_id": user.id,
             "original_resume": bleach.clean(data['original_resume']),
-            "pdf_resume": data.get('pdf_resume')  # Store base64 string or None
+            "pdf_resume": data.get('pdf_resume'),
+            "answers": data.get('answers', None)
         }
 
         application = supabase.table('applications').insert(application_data).execute()
@@ -215,6 +254,22 @@ def get_applications():
         return jsonify(applications.data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/users', methods=['GET'])
+@admin_required
+def list_users():
+    users = supabase.table('profiles').select('*').execute()
+    return jsonify(users.data)
+
+@app.route('/api/users/<user_id>/status', methods=['PATCH'])
+@admin_required
+def set_user_status(user_id):
+    data = request.json
+    is_active = data.get('is_active')
+    if is_active is None:
+        return jsonify({"error": "Missing is_active"}), 400
+    result = supabase.table('profiles').update({'is_active': is_active}).eq('id', user_id).execute()
+    return jsonify(result.data)
 
 @app.route('/api/health', methods=['GET'])
 def health_check():

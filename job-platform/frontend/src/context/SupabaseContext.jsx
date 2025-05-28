@@ -106,33 +106,40 @@ export function SupabaseProvider({ children }) {
   };
 
   // Register function
-  const register = async ({ email, password, role, company_name }) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          role,
-          company_name: company_name || null,
-        },
-      },
-    });
+const register = async ({ email, password, role, company_name }) => {
+  // Only include company_name for employers
+  const userData = { role };
+  if (role === 'employer') {
+    userData.company_name = company_name || null;
+  }
 
-    if (error) {
-      // If user already registered, try to log them in
-      if (error.message && error.message.toLowerCase().includes('already registered')) {
-        // Try to log in
-        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-        if (loginError) {
-          throw loginError;
-        } else {
-          alert('Account already exists. You have been logged in.');
-          return;
-        }
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: userData,
+    },
+  });
+
+  if (error) {
+    // If user already registered, log them in instead
+    if (
+      error.message &&
+      (error.message.toLowerCase().includes('already registered') ||
+        error.message.toLowerCase().includes('user already exists'))
+    ) {
+      // Try to log in
+      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+      if (loginError) {
+        throw loginError;
+      } else {
+        alert('Account already exists. You have been logged in.');
+        return;
       }
-      throw error;
     }
-  };
+    throw error;
+  }
+};
 
   return (
     <SupabaseContext.Provider
