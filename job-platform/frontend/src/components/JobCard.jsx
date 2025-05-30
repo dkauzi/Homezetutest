@@ -19,16 +19,25 @@ export default function JobCard({ job }) {
             <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
               {job.salary_range}
             </span>
+            {job.featured && (
+              <span className="ml-2 px-2 py-1 bg-yellow-300 text-yellow-900 rounded text-xs">
+                Featured
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right min-w-[120px]">
-          <p className="text-sm text-gray-500">{job.profiles?.company_name}</p>
+          <p className="text-sm text-gray-500">
+            <Link to={`/company/${job.company_id}`} className="hover:text-blue-600">
+              {job.profiles?.company_name}
+            </Link>
+          </p>
           <p className="text-xs text-gray-400 mt-1">
             {new Date(job.created_at).toLocaleDateString()}
           </p>
         </div>
       </div>
-      <Link 
+      <Link
         to={`/jobs/${job.id}`}
         className="inline-block mt-4 text-blue-600 hover:text-blue-800 font-medium"
       >

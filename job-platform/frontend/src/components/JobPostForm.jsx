@@ -10,7 +10,8 @@ const JobPostForm = () => {
     salary: '',
     type: 'full-time',
     company: '',
-    additional_questions: ['']
+    additional_questions: [''],
+    external_apply_url: ''
   });
   const [message, setMessage] = useState(null);
 
@@ -42,6 +43,8 @@ const JobPostForm = () => {
       const { error } = await supabase
         .from('jobs')
         .insert({
+  //           ...form,
+  // external_apply_url: form.external_apply_url || null,
           title: formData.title,
           description: formData.description,
           location: formData.location,
@@ -49,7 +52,8 @@ const JobPostForm = () => {
           type: formData.type,
           employer_id: session.user.id,
           company: companyValue,
-          additional_questions: formData.additional_questions.filter(q => q.trim() !== '')
+          additional_questions: formData.additional_questions.filter(q => q.trim() !== ''),
+          external_apply_url: formData.external_apply_url
         });
 
       if (error) throw error;
@@ -62,7 +66,8 @@ const JobPostForm = () => {
         salary: '',
         type: 'full-time',
         company: '',
-        additional_questions: ['']
+        additional_questions: [''],
+        external_apply_url: ''
       });
 
       setTimeout(() => setMessage(null), 3000);
@@ -159,6 +164,16 @@ const JobPostForm = () => {
             </div>
           ))}
           <button type="button" onClick={addQuestion} className="text-blue-600">+ Add Question</button>
+        </div>
+        <div>
+          <label className="block mb-2 font-medium">External Apply Link (optional)</label>
+          <input
+            type="url"
+            className="w-full border rounded p-2 mb-4"
+            placeholder="https://company.com/apply"
+            value={formData.external_apply_url || ''}
+            onChange={e => setFormData({ ...formData, external_apply_url: e.target.value })}
+/>
         </div>
 
         {message && (

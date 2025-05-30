@@ -38,6 +38,28 @@ export default function EmployerDashboard() {
     else setApplications([]);
   }, [supabase, user, jobs]);
 
+  const setJobStatus = async (jobId, status) => {
+    await supabase.from('jobs').update({ status }).eq('id', jobId);
+    setJobs(jobs => jobs.map(j => j.id === jobId ? { ...j, status } : j));
+  };
+
+  const createJob = async (jobData) => {
+    const { error } = await supabase.from('jobs').insert({
+      ...jobData,
+      status: 'pending',
+      employer_id: user.id,
+    });
+    if (error) setError(error.message);
+    else setJobs(jobs => [...jobs, { ...jobData, status: 'pending', employer_id: user.id }]);
+  };
+
+  const stages = ['applied', 'phone_screen', 'interview', 'offer', 'hired', 'rejected'];
+
+  const updateStage = async (appId, newStage) => {
+    await supabase.from('applications').update({ stage: newStage }).eq('id', appId);
+    setApplications(apps => apps.map(a => a.id === appId ? { ...a, stage: newStage } : a));
+  };
+
   if (loading) return <div className="p-8">Loading...</div>;
   if (error) return <div className="p-8 text-red-500">{error}</div>;
 
@@ -50,7 +72,7 @@ export default function EmployerDashboard() {
 
   return (
     <div className="max-w-5xl mx-auto p-8">
-      <JobPostForm />
+      <JobPostForm onSubmit={createJob} />
       <h1 className="text-2xl font-bold mb-6">Your Job Postings & Applicants</h1>
       {jobs.length === 0 ? (
         <div>No jobs posted yet.</div>
@@ -108,6 +130,14 @@ export default function EmployerDashboard() {
                 </tbody>
               </table>
             )}
+            <div className="mt-4 flex gap-2">
+              <button
+                className="bg-gray-400 text-white px-3 py-1 rounded"
+                onClick={() => setJobStatus(job.id, 'archived')}
+              >
+                Archive
+              </button>
+            </div>
           </div>
         ))
       )}
@@ -144,6 +174,13 @@ export default function EmployerDashboard() {
                 >
                   View PDF
                 </a>
+                <a
+                  href={selectedApp.pdf_resume}
+                  download
+                  className="ml-2 text-blue-600 underline"
+                >
+                  Download PDF
+                </a>
               </div>
             )}
             {selectedApp.answers && Array.isArray(selectedApp.answers) && selectedApp.answers.length > 0 && (
@@ -156,6 +193,30 @@ export default function EmployerDashboard() {
                 </ul>
               </div>
             )}
+            <div className="mb-2">
+              <strong>Notes:</strong>
+              <textarea
+                className="w-full border rounded p-2"
+                value={selectedApp.notes || ''}
+                onChange={e => setSelectedApp({ ...selectedApp, notes: e.target.value })}
+                onBlur={async () => {
+                  await supabase.from('applications').update({ notes: selectedApp.notes }).eq('id', selectedApp.id);
+                }}
+              />
+            </div>
+            <div className="mb-2">
+              <strong>Rating:</strong>
+              <input
+                type="number"
+                min="1"
+                max="5"
+                value={selectedApp.rating || ''}
+                onChange={e => setSelectedApp({ ...selectedApp, rating: e.target.value })}
+                onBlur={async () => {
+                  await supabase.from('applications').update({ rating: selectedApp.rating }).eq('id', selectedApp.id);
+                }}
+              />
+            </div>
             <div className="mt-4 flex gap-2">
               <button
                 className="bg-gray-300 px-4 py-2 rounded"
@@ -167,6 +228,27 @@ export default function EmployerDashboard() {
           </div>
         </div>
       )}
+
+      <div className="flex gap-4">
+        {stages.map(stage => (
+          <div key={stage} className="flex-1 bg-gray-100 rounded p-2">
+            <h3 className="font-bold capitalize mb-2">{stage.replace('_', ' ')}</h3>
+            {applications.filter(app => app.stage === stage).map(app => (
+              <div key={app.id} className="bg-white rounded shadow p-2 mb-2">
+                <div>{app.profiles?.email}</div>
+                <button
+                  disabled={stage === 'applied'}
+                  onClick={() => updateStage(app.id, stages[stages.indexOf(stage) - 1])}
+                >Prev</button>
+                <button
+                  disabled={stage === 'rejected' || stage === 'hired'}
+                  onClick={() => updateStage(app.id, stages[stages.indexOf(stage) + 1])}
+                >Next</button>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

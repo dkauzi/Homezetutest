@@ -25,7 +25,7 @@ limiter = Limiter(
 # Initialize Supabase
 supabase = create_client(
     os.getenv('SUPABASE_URL'),
-    os.getenv('SUPABASE_KEY')
+    os.getenv('SUPABASE_SERVICE_ROLE_KEY')
 )
 
 # For admin operations:
@@ -138,7 +138,7 @@ def register():
             raise Exception("User creation failed")
 
         # 3. Insert profile using service role
-        profile = admin_client.table('profiles').insert({
+        profile = admin_client.table('profiles(*)').insert({
             "id": auth_resp.user.id,
             "email": data['email'],
             "role": data['role'],
@@ -258,7 +258,7 @@ def get_applications():
 @app.route('/api/users', methods=['GET'])
 @admin_required
 def list_users():
-    users = supabase.table('profiles').select('*').execute()
+    users = admin_client.table('profiles').select('*').execute()
     return jsonify(users.data)
 
 @app.route('/api/users/<user_id>/status', methods=['PATCH'])
@@ -268,7 +268,17 @@ def set_user_status(user_id):
     is_active = data.get('is_active')
     if is_active is None:
         return jsonify({"error": "Missing is_active"}), 400
-    result = supabase.table('profiles').update({'is_active': is_active}).eq('id', user_id).execute()
+    result = admin_client.table('profiles').update({'is_active': is_active}).eq('id', user_id).execute()
+    return jsonify(result.data)
+
+@app.route('/api/users/<user_id>/role', methods=['PATCH'])
+@admin_required
+def set_user_role(user_id):
+    data = request.json
+    role = data.get('role')
+    if role not in ['admin', 'employer', 'jobseeker']:
+        return jsonify({"error": "Invalid role"}), 400
+    result = admin_client.table('profiles').update({'role': role}).eq('id', user_id).execute()
     return jsonify(result.data)
 
 @app.route('/api/health', methods=['GET'])

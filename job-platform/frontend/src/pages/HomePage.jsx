@@ -2,11 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useSupabase } from '../context/SupabaseContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { toast } from 'react-toastify';
 
 const HomePage = () => {
   const { user, supabase, logout, loading } = useSupabase();
   const [featuredJobs, setFeaturedJobs] = useState([]);
   const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -26,6 +30,17 @@ const HomePage = () => {
 
     if (supabase) fetchJobs();
   }, [supabase]);
+
+  const saveJob = async (jobId) => {
+    await supabase.from('saved_jobs').insert({ user_id: user.id, job_id: jobId });
+    toast.success('Job saved!');
+  };
+
+  const filteredJobs = featuredJobs.filter(job =>
+    job.title.toLowerCase().includes(search.toLowerCase()) &&
+    (typeFilter ? job.type === typeFilter : true) &&
+    (locationFilter ? job.location === locationFilter : true)
+  );
 
   if (loading) {
     return (
@@ -85,13 +100,25 @@ const HomePage = () => {
         <h2 className="text-2xl font-bold text-blue-800 mb-6">
           Featured Job Opportunities
         </h2>
+        <div className="flex gap-4 mb-6">
+          <input className="border rounded p-2" placeholder="Search jobs"
+            value={search} onChange={e => setSearch(e.target.value)} />
+          <select className="border rounded p-2" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <option value="">All Types</option>
+            <option value="full-time">Full-time</option>
+            <option value="part-time">Part-time</option>
+            <option value="contract">Contract</option>
+          </select>
+          <input className="border rounded p-2" placeholder="Location"
+            value={locationFilter} onChange={e => setLocationFilter(e.target.value)} />
+        </div>
         {featuredJobs.length === 0 ? (
           <div className="flex justify-center items-center h-64">
             <LoadingSpinner size={12} />
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {featuredJobs.map((job) => (
+            {filteredJobs.map((job) => (
               <div 
                 key={job.id}
                 className="bg-white p-6 rounded-2xl shadow-lg border border-blue-100 hover:shadow-xl transition-shadow flex flex-col"
@@ -114,12 +141,20 @@ const HomePage = () => {
                   </span>
                 </div>
                 <p className="text-gray-700 mb-4 line-clamp-3">{job.description}</p>
-                <Link
-                  to={`/jobs/${job.id}`}
-                  className="mt-auto inline-block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow"
-                >
-                  View Details
-                </Link>
+                <div className="flex gap-2">
+                  <Link
+                    to={`/jobs/${job.id}`}
+                    className="mt-auto inline-block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow"
+                  >
+                    View Details
+                  </Link>
+                  <button
+                    className="ml-2 text-yellow-500"
+                    onClick={() => saveJob(job.id)}
+                  >
+                    ★ Save
+                  </button>
+                </div>
               </div>
             ))}
           </div>

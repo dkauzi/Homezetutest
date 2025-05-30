@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -10,6 +10,7 @@ export default function AdminDashboard() {
   const [selectedApp, setSelectedApp] = useState(null);
   const [editingJob, setEditingJob] = useState(null);
   const [editJobData, setEditJobData] = useState({});
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
   const navigate = useNavigate();
 
   // Redirect non-admins
@@ -20,14 +21,16 @@ export default function AdminDashboard() {
   }, [user, navigate]);
 
   // Fetch all users
+  const fetchUsers = useCallback(async () => {
+    const { data, error } = await supabase.from('profiles').select('*');
+    setUsers(data || []);
+  }, [supabase]);
+
   useEffect(() => {
     if (user?.user_metadata?.role === 'admin') {
-      supabase
-        .from('profiles')
-        .select('*')
-        .then(({ data }) => setUsers(data || []));
+      fetchUsers();
     }
-  }, [supabase, user]);
+  }, [supabase, user, fetchUsers]);
 
   // Fetch all jobs
   useEffect(() => {
@@ -49,10 +52,32 @@ export default function AdminDashboard() {
     }
   }, [supabase, user]);
 
-  // Enable/Disable user
+  // Enable/disable user
   const setStatus = async (userId, isActive) => {
-    await supabase.from('profiles').update({ is_active: isActive }).eq('id', userId);
+    const token = await supabase.auth.getSession().then(({ data }) => data.session?.access_token);
+    await fetch(`/api/users/${userId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ is_active: isActive }),
+    });
     setUsers(users => users.map(u => u.id === userId ? { ...u, is_active: isActive } : u));
+  };
+
+  // Role change handler
+  const setRole = async (userId, role) => {
+    const token = await supabase.auth.getSession().then(({ data }) => data.session?.access_token);
+    await fetch(`/api/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ role }),
+    });
+    setUsers(users => users.map(u => u.id === userId ? { ...u, role } : u));
   };
 
   // Accept/Reject handler for applications
@@ -78,6 +103,12 @@ export default function AdminDashboard() {
     setJobs(jobs => jobs.map(j => j.id === editingJob.id ? { ...j, ...editJobData } : j));
   };
 
+  // Set job status (e.g., archive)
+  const setJobStatus = async (jobId, status) => {
+    await supabase.from('jobs').update({ status }).eq('id', jobId);
+    setJobs(jobs => jobs.map(j => j.id === jobId ? { ...j, status } : j));
+  };
+
   // Helper to render status badge
   const StatusBadge = ({ status }) => (
     <span className={`px-2 py-1 rounded text-xs font-semibold ${status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -89,9 +120,24 @@ export default function AdminDashboard() {
   const renderUserTable = (users, title) => (
     <>
       <h2 className="text-xl font-bold mb-4">{title}</h2>
+      <div className="mb-4">
+        <button
+          className="bg-red-600 text-white px-3 py-1 rounded mr-2"
+          onClick={() => bulkSetStatus(false)}
+        >
+          Disable Selected
+        </button>
+        <button
+          className="bg-green-600 text-white px-3 py-1 rounded"
+          onClick={() => bulkSetStatus(true)}
+        >
+          Enable Selected
+        </button>
+      </div>
       <table className="min-w-full bg-white rounded shadow mb-8">
         <thead>
           <tr>
+            <th className="px-4 py-2">Select</th>
             <th className="px-4 py-2">Email</th>
             <th className="px-4 py-2">Role</th>
             <th className="px-4 py-2">Status</th>
@@ -99,10 +145,31 @@ export default function AdminDashboard() {
           </tr>
         </thead>
         <tbody>
-          {users.map(u => (
+          {(Array.isArray(users) ? users : []).map(u => (
             <tr key={u.id}>
+              <td className="border px-4 py-2">
+                <input
+                  type="checkbox"
+                  checked={selectedUserIds.includes(u.id)}
+                  onChange={e => {
+                    setSelectedUserIds(e.target.checked
+                      ? [...selectedUserIds, u.id]
+                      : selectedUserIds.filter(id => id !== u.id));
+                  }}
+                />
+              </td>
               <td className="border px-4 py-2">{u.email}</td>
-              <td className="border px-4 py-2 capitalize">{u.role}</td>
+              <td className="border px-4 py-2 capitalize">
+                <select
+                  value={u.role}
+                  onChange={e => setRole(u.id, e.target.value)}
+                  className="border rounded p-1"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="employer">Employer</option>
+                  <option value="jobseeker">Jobseeker</option>
+                </select>
+              </td>
               <td className="border px-4 py-2">
                 <StatusBadge status={u.is_active ? 'Active' : 'Disabled'} />
               </td>
@@ -164,6 +231,28 @@ export default function AdminDashboard() {
                 >
                   Edit
                 </button>
+                <button
+                  className="ml-2 bg-gray-400 text-white px-3 py-1 rounded"
+                  onClick={() => setJobStatus(job.id, 'archived')}
+                >
+                  Archive
+                </button>
+                {job.status === 'pending' && (
+                  <>
+                    <button
+                      className="bg-green-600 text-white px-3 py-1 rounded mr-2"
+                      onClick={() => setJobStatus(job.id, 'active')}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="bg-red-600 text-white px-3 py-1 rounded"
+                      onClick={() => setJobStatus(job.id, 'rejected')}
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
               </td>
             </tr>
           ))}
@@ -220,9 +309,41 @@ export default function AdminDashboard() {
     </>
   );
 
+  // Bulk status update for users
+  const bulkSetStatus = async (isActive) => {
+    await Promise.all(selectedUserIds.map(id =>
+      fetch(`/api/users/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: isActive }),
+      })
+    ));
+    setUsers(users => users.map(u =>
+      selectedUserIds.includes(u.id) ? { ...u, is_active: isActive } : u
+    ));
+    setSelectedUserIds([]);
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-8">
       <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
+
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white rounded shadow p-4">
+          <div className="text-2xl font-bold">{users.length}</div>
+          <div className="text-gray-600">Users</div>
+        </div>
+        <div className="bg-white rounded shadow p-4">
+          <div className="text-2xl font-bold">{jobs.length}</div>
+          <div className="text-gray-600">Jobs</div>
+        </div>
+        <div className="bg-white rounded shadow p-4">
+          <div className="text-2xl font-bold">{applications.length}</div>
+          <div className="text-gray-600">Applications</div>
+        </div>
+      </div>
+
       {renderUserTable(users, "All Users")}
       {renderJobsTable()}
       {renderApplicationsTable()}
@@ -261,6 +382,28 @@ export default function AdminDashboard() {
               value={editJobData.type}
               onChange={e => setEditJobData({ ...editJobData, type: e.target.value })}
               placeholder="Type"
+            />
+            <input
+              type="checkbox"
+              checked={!!editJobData.featured}
+              onChange={e => setEditJobData({ ...editJobData, featured: e.target.checked })}
+              className="mr-2"
+            />
+            <label className="mr-4">Featured</label>
+            <input
+              type="date"
+              value={editJobData.expiry_date ? editJobData.expiry_date.slice(0, 10) : ''}
+              onChange={e => setEditJobData({ ...editJobData, expiry_date: e.target.value })}
+              className="border rounded p-2 mb-2"
+            />
+            <label>Expiry Date</label>
+            <label className="block mb-2 font-medium">External Apply Link (optional)</label>
+            <input
+              type="url"
+              className="w-full border rounded p-2 mb-4"
+              placeholder="https://company.com/apply"
+              value={editJobData.external_apply_url || ''}
+              onChange={e => setEditJobData({ ...editJobData, external_apply_url: e.target.value })}
             />
             <div className="flex gap-2 mt-4">
               <button

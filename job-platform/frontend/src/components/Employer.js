@@ -1,6 +1,7 @@
 // src/components/Employer.js
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { Link } from 'react-router-dom';
 
 export default function Employer() {
   const [jobs, setJobs] = useState([]);
@@ -38,6 +39,7 @@ export default function Employer() {
         <div key={job.id} className="job-card">
           <h3>{job.title}</h3>
           <p>{job.description}</p>
+          <Link to={`/company/${job.company_id}`}>{job.company_id}</Link>
         </div>
       ))}
     </div>
