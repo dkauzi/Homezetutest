@@ -1,65 +1,66 @@
-// src/pages/EmployerDashboard.jsx
 import React, { useEffect, useState } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import JobPostForm from '../components/JobPostForm';
 
 export default function EmployerDashboard() {
-  const { getApplications, loading, user, supabase } = useSupabase();
+  const { user, supabase, loading } = useSupabase();
+  const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
   const [error, setError] = useState(null);
   const [selectedApp, setSelectedApp] = useState(null);
 
+  // Fetch all jobs posted by this employer
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const apps = await getApplications();
-        setApplications(apps);
-      } catch (err) {
-        setError(err.message || 'Failed to load applications');
-      }
+    if (!user) return;
+    const fetchJobs = async () => {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('employer_id', user.id);
+      if (error) setError(error.message);
+      else setJobs(data || []);
     };
-    loadData();
-  }, [getApplications]);
+    fetchJobs();
+  }, [supabase, user]);
+
+  // Fetch all applications for this employer's jobs
+  useEffect(() => {
+    if (!user) return;
+    const fetchApplications = async () => {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('*, profiles(*)')
+        .in('job_id', jobs.map(j => j.id));
+      if (error) setError(error.message);
+      else setApplications(data || []);
+    };
+    if (jobs.length > 0) fetchApplications();
+    else setApplications([]);
+  }, [supabase, user, jobs]);
 
   if (loading) return <div className="p-8">Loading...</div>;
   if (error) return <div className="p-8 text-red-500">{error}</div>;
 
-  // Group applications by job
-  const jobsMap = {};
+  // Group applications by job id
+  const appsByJob = {};
   applications.forEach(app => {
-    if (!jobsMap[app.jobs.id]) {
-      jobsMap[app.jobs.id] = {
-        job: app.jobs,
-        applicants: []
-      };
-    }
-    jobsMap[app.jobs.id].applicants.push(app);
+    if (!appsByJob[app.job_id]) appsByJob[app.job_id] = [];
+    appsByJob[app.job_id].push(app);
   });
-
-  // Accept/Reject handler
-  const handleStatusChange = async (appId, status) => {
-    await supabase.from('applications').update({ status }).eq('id', appId);
-    setApplications(apps =>
-      apps.map(a => a.id === appId ? { ...a, status } : a)
-    );
-    if (selectedApp && selectedApp.id === appId) {
-      setSelectedApp({ ...selectedApp, status });
-    }
-  };
 
   return (
     <div className="max-w-5xl mx-auto p-8">
       <JobPostForm />
       <h1 className="text-2xl font-bold mb-6">Your Job Postings & Applicants</h1>
-      {Object.keys(jobsMap).length === 0 ? (
-        <div>No jobs or applications found.</div>
+      {jobs.length === 0 ? (
+        <div>No jobs posted yet.</div>
       ) : (
-        Object.values(jobsMap).map(({ job, applicants }) => (
-          <div key={job.id} className="mb-8 bg-white rounded-xl shadow border border-trust-mid p-6">
+        jobs.map(job => (
+          <div key={job.id} className="mb-8 bg-white rounded-xl shadow border p-6">
             <h2 className="text-xl font-semibold text-primary mb-2">{job.title}</h2>
             <p className="mb-2 text-gray-700">{job.description}</p>
             <h3 className="font-semibold mb-2">Applicants:</h3>
-            {applicants.length === 0 ? (
+            {(appsByJob[job.id]?.length ?? 0) === 0 ? (
               <div className="text-gray-500 mb-2">No applications yet.</div>
             ) : (
               <table className="min-w-full bg-white rounded shadow">
@@ -72,11 +73,10 @@ export default function EmployerDashboard() {
                     <th className="px-4 py-2 text-left">Resume</th>
                     <th className="px-4 py-2 text-left">PDF</th>
                     <th className="px-4 py-2 text-left">Status</th>
-                    <th className="px-4 py-2 text-left">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {applicants.map(app => (
+                  {appsByJob[job.id].map(app => (
                     <tr
                       key={app.id}
                       className="hover:bg-blue-50 cursor-pointer"
@@ -102,31 +102,7 @@ export default function EmployerDashboard() {
                           <span className="text-gray-400">N/A</span>
                         )}
                       </td>
-                      <td className="border px-4 py-2">
-                        {app.status || 'Submitted'}
-                      </td>
-                      <td className="border px-4 py-2" onClick={e => e.stopPropagation()}>
-                        {app.status === 'Accepted' ? (
-                          <span className="text-green-600 font-semibold">Accepted</span>
-                        ) : app.status === 'Rejected' ? (
-                          <span className="text-red-600 font-semibold">Rejected</span>
-                        ) : (
-                          <>
-                            <button
-                              className="bg-green-600 text-white px-2 py-1 rounded mr-2"
-                              onClick={() => handleStatusChange(app.id, 'Accepted')}
-                            >
-                              Accept
-                            </button>
-                            <button
-                              className="bg-red-600 text-white px-2 py-1 rounded"
-                              onClick={() => handleStatusChange(app.id, 'Rejected')}
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                      </td>
+                      <td className="border px-4 py-2">{app.status || 'Submitted'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -181,22 +157,6 @@ export default function EmployerDashboard() {
               </div>
             )}
             <div className="mt-4 flex gap-2">
-              {selectedApp.status !== 'Accepted' && (
-                <button
-                  className="bg-green-600 text-white px-4 py-2 rounded"
-                  onClick={() => handleStatusChange(selectedApp.id, 'Accepted')}
-                >
-                  Accept
-                </button>
-              )}
-              {selectedApp.status !== 'Rejected' && (
-                <button
-                  className="bg-red-600 text-white px-4 py-2 rounded"
-                  onClick={() => handleStatusChange(selectedApp.id, 'Rejected')}
-                >
-                  Reject
-                </button>
-              )}
               <button
                 className="bg-gray-300 px-4 py-2 rounded"
                 onClick={() => setSelectedApp(null)}

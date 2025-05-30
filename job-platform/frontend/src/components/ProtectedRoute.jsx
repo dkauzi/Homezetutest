@@ -1,8 +1,8 @@
 // src/components/ProtectedRoute.jsx
 import { useSupabase } from '../context/SupabaseContext';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, Outlet } from 'react-router-dom';
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ allowedRoles }) => {
   const { user, loading } = useSupabase();
   const location = useLocation();
 
@@ -16,7 +16,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/" replace />;
   }
 
-  return children;
+  return <Outlet />;
 };
 
-export default ProtectedRoute; // Default export
+export default ProtectedRoute;
